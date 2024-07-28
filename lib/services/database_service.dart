@@ -28,7 +28,7 @@ class DatabaseService {
   final String _issuedticketshours = "hours";
   final String _issuedticketstotal = "total";
   final String _issuedticketsstatus = "status";
-  final String ticketstatus = "unpaid";
+  final String ticketstatus = "pending";
   final String _ticketapistatus = "api";
 
   //toilet_receipt Table
@@ -298,7 +298,16 @@ class DatabaseService {
   }
 
 
-  Future <String> storeticketdetails(String? title, String? toilettitle, String? companyname, String? companyaddress, String? footers, String? parkingrate, String? toiletprice) async {
+  Future<String> storeticketdetails(
+      String? title,
+      String? toilettitle,
+      String? companyname,
+      String? companyaddress,
+      String? footers,
+      String? parkingrate,
+      String? toiletprice,
+      List pending_data,
+      ) async {
     final db = await database;
 
     Map<String, dynamic> values = {
@@ -330,43 +339,65 @@ class DatabaseService {
     );
 
     // Check if the update was successful
-    if (count > 0) {
-      if(count1 > 0)
-        {
-          final List<Map<String, dynamic>> updatedTable = await db.query(_ticket_detailstable);
-          final List<Map<String, dynamic>> updatedTable1 = await db.query(_mobilepos_configurationtable);
+    if (count > 0 && count1 > 0) {
+      final List<Map<String, dynamic>> updatedTable = await db.query(_ticket_detailstable);
+      final List<Map<String, dynamic>> updatedTable1 = await db.query(_mobilepos_configurationtable);
 
-          receipt_title = await updatedTable[0]['title'];
-          toilet_title = await updatedTable[0]['toilet_title'];
-          company_name = await updatedTable[0]['company_name'];
-          company_address= await updatedTable[0]['company_address'];
-          footer = await updatedTable[0]['footer'];
+      receipt_title = await updatedTable[0]['title'];
+      toilet_title = await updatedTable[0]['toilet_title'];
+      company_name = await updatedTable[0]['company_name'];
+      company_address = await updatedTable[0]['company_address'];
+      footer = await updatedTable[0]['footer'];
 
-          parking_rate = await updatedTable1[0]['parking_rate'];
-          toilet_price = await updatedTable1[0]['toilet_rate'];
+      parking_rate = await updatedTable1[0]['parking_rate'];
+      toilet_price = await updatedTable1[0]['toilet_rate'];
 
-          updatedTable.forEach((row) {
-            print(row);
+      updatedTable.forEach((row) {
+        print(row);
+      });
+
+      print(updatedTable);
+
+      // Get the list of pending but uploaded tickets
+      final List<Map<String, dynamic>> checkdatabase = await db.query(
+        _issuedticketstable,
+        where: '$_ticketapistatus = ? AND $_issuedticketsstatus = ?',
+        whereArgs: ['200', 'pending'],
+      );
+
+      print("LIST OF PENDING BUT UPLOADED");
+      print(checkdatabase);
+      print("LIST OF PENDING DATA FROM THE ONLINE DATABASE");
+      print(pending_data);
+
+      // Insert only non-existing pending data into _issuedticketstable
+      for (var pendingItem in pending_data) {
+        bool exists = checkdatabase.any((dbItem) =>
+        dbItem['ticket_number'] == pendingItem['ticket_number'] &&
+            dbItem['plate_number'] == pendingItem['plate_number'] &&
+            dbItem['time_in'] == pendingItem['time-in']
+        );
+
+        if (!exists) {
+          await db.insert(_issuedticketstable, {
+            'ticket_number': pendingItem['ticket_number'],
+            'plate_number': pendingItem['plate_number'],
+            'time_in': pendingItem['time-in'],
+            'time_out': '',
+            'hours': '',
+            'total': '',
+            'status': pendingItem['status'],
+            'api': '200',
           });
-
-          print(updatedTable);
-
-
-          return "200";
         }
-      else
-        {
-          return "404";
-        }
+      }
 
-
+      return "200";
     } else {
       return "404";
-
     }
-
-
   }
+
 
   Future <String> insert_issued_tickets(String platenumber, String timein) async
   {
@@ -375,7 +406,7 @@ class DatabaseService {
     final List<Map<String, dynamic>> checkdatabase = await db.query(
         _issuedticketstable,
         where: '$_issuedticketsplatenumber = ? AND $_issuedticketsstatus = ?',
-        whereArgs: [platenumber, 'unpaid']
+        whereArgs: [platenumber, 'pending']
     );
 
     if(checkdatabase.isEmpty)
@@ -401,12 +432,12 @@ class DatabaseService {
 
           await db.update(_issuedticketstable, values,
               where: '$_issuedticketsplatenumber = ? AND $_issuedticketsstatus = ?',
-              whereArgs: [platenumber, 'unpaid']);
+              whereArgs: [platenumber, 'pending']);
 
           final List<Map<String, dynamic>> updatedTable = await db.query(
               _issuedticketstable,
               where: '$_issuedticketsplatenumber = ? AND $_issuedticketsstatus = ?',
-              whereArgs: [platenumber, 'unpaid']
+              whereArgs: [platenumber, 'pending']
           );
 
           ticket_number = await updatedTable[0]['ticket_number'];
@@ -472,11 +503,12 @@ class DatabaseService {
       _issuedticketshours: hours,
       _issuedticketstotal: total,
       _issuedticketsstatus: status,
+      _ticketapistatus: '404',
     };
 
     int check = await db.update(_issuedticketstable, values,
         where: '$_issuedticketsplatenumber = ? AND $_issuedticketsstatus = ?',
-        whereArgs: [platenumber, 'unpaid']);
+        whereArgs: [platenumber, 'pending']);
 
     if(check > 0)
       {
@@ -540,8 +572,8 @@ class DatabaseService {
     List<Map<String, dynamic>> list4 = await db.query(_toiletreceipttable);
     //print(list);
     //print(list1);
+    print("CURRENT ISSUED TICKET DATABASE");
     print(list3);
-    print(list4);
 
     /*
     list2.forEach((row){
@@ -633,8 +665,8 @@ class DatabaseService {
           };
 
           await db.update(_issuedticketstable, values,
-              where: '$_ticketapistatus = ? AND $_issuedticketsstatus = ?',
-              whereArgs: ['404', 'paid']);
+              where: '$_ticketapistatus = ? ', // AND $_issuedticketsstatus = ?
+              whereArgs: ['404' /*,'paid'*/]);
 
           final apilink1 = hostaddress + "/api/uploadtoilet";
 

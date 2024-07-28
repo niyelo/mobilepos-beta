@@ -115,11 +115,12 @@ class _MainPageState extends State<MainPage> {
           String temp_parking_price = company_details['parking_rate'][0];
           String temp_toilet_price = company_details['toilet_rate'][0];
 
-          print(temp_parking_price);
+          List<dynamic> pending_data = company_details['pending_data'];
+
 
           String storedetails = await _databaseService.storeticketdetails(
               temp_receipt_title, temp_toilet_title, temp_company_name,
-              temp_company_address, temp_footer, temp_parking_price, temp_toilet_price);
+              temp_company_address, temp_footer, temp_parking_price, temp_toilet_price, pending_data);
 
           if (storedetails == "200") {
             print("SUCCESSFULLY INSERTED DATA FROM API TO DATABASE");
